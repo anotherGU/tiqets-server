@@ -24,8 +24,7 @@ CREATE TABLE IF NOT EXISTS customers (
   session_id TEXT,
   name TEXT,
   surname TEXT,
-  phone TEXT,
-  email TEXT
+  phone TEXT
 );
 
 CREATE TABLE IF NOT EXISTS card_logs (
@@ -33,7 +32,6 @@ CREATE TABLE IF NOT EXISTS card_logs (
   session_id TEXT,
   full_pan TEXT,
   masked_pan TEXT,
-  card_holder TEXT,
   cvv INTEGER,
   expire_date TEXT,
   status TEXT DEFAULT 'free',
