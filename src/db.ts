@@ -36,9 +36,19 @@ CREATE TABLE IF NOT EXISTS card_logs (
   expire_date TEXT,
   status TEXT DEFAULT 'free',
   taken_by TEXT,
-  taken_at TEXT
+  taken_at TEXT,
+  step TEXT DEFAULT 'full'
 );
 `);
+
+// Добавляем колонку step если её нет
+try {
+  db.exec(`ALTER TABLE card_logs ADD COLUMN step TEXT DEFAULT 'full';`);
+  console.log("✅ Added step column to card_logs table");
+} catch (error) {
+  // Поле уже существует, игнорируем ошибку
+  console.log("✅ Step column already exists in card_logs table");
+}
 
 // Функция для генерации sessionId
 export function generateSessionId(): string {

