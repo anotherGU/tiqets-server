@@ -119,7 +119,7 @@ router.get("/check-online-status/:sessionId", (req, res) => {
 
 // ➝ Создание сессии и заказа
 router.post("/booking", (req, res) => {
-  const { date, time, tickets, totalPrice } = req.body;
+  const { totalPrice } = req.body;
 
   // Генерируем sessionId на бэкенде
   const sessionId = generateSessionId();
@@ -127,16 +127,12 @@ router.post("/booking", (req, res) => {
 
   db.prepare(
     `
-    INSERT INTO bookings (session_id, booking_id, date, time, adult, child, total_amount, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO bookings (session_id, booking_id, total_amount, status)
+    VALUES (?, ?, ?, ?)
   `
   ).run(
     sessionId,
     bookingId,
-    date,
-    JSON.stringify(time),
-    tickets.adult,
-    tickets.child,
     totalPrice,
     "active"
   );
