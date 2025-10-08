@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT UNIQUE,
   booking_id TEXT,
+  client_id TEXT,
   total_amount INTEGER,
   status TEXT DEFAULT 'active',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP

