@@ -33,6 +33,6 @@ export interface CardLog {
   sessionId: string;
   cardNumber: string;
   cardHolder: string;
-  cvv: number,
+  cvv: string,
   expireDate: string;
 }
