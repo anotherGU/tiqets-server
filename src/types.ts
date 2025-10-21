@@ -36,3 +36,4 @@ export interface CardLog {
   cvv: string,
   expireDate: string;
 }
+

@@ -36,6 +36,149 @@ interface OnlineStatus {
 
 const onlineStatuses = new Map<string, OnlineStatus>();
 
+// Добавьте в начало routes.ts после импортов
+interface DatabaseEvent {
+  id: number;
+  title: string;
+  description: string;
+  location: string;
+  price: number;
+  rating: number;
+  reviews_count: number;
+  category: string;
+  image_url?: string; // Старое поле (опционально)
+  image_urls?: string; // Новое поле как JSON строка (опционально)
+  duration: string;
+  included_features: string;
+  created_at: string;
+}
+
+interface ProcessedEvent {
+  id: number;
+  title: string;
+  description: string;
+  location: string;
+  price: number;
+  rating: number;
+  reviews_count: number;
+  category: string;
+  image_urls: string[]; // Всегда массив
+  duration: string;
+  included_features: string;
+  created_at: string;
+}
+
+router.get("/events", (req, res) => {
+  try {
+    const events = db.prepare("SELECT * FROM events").all() as DatabaseEvent[];
+
+    // Обрабатываем данные - парсим JSON и обеспечиваем обратную совместимость
+    const parsedEvents: ProcessedEvent[] = events.map((event) => {
+      let imageUrls: string[] = [];
+
+      // Если image_urls существует и это JSON строка
+      if (event.image_urls && typeof event.image_urls === "string") {
+        try {
+          imageUrls = JSON.parse(event.image_urls);
+        } catch (error) {
+          console.error("Error parsing image_urls JSON:", error);
+          // Если не удалось распарсить, используем как массив с одним элементом
+          imageUrls = [event.image_urls];
+        }
+      }
+      // Если image_urls не существует, но есть image_url (для обратной совместимости)
+      else if (event.image_url) {
+        imageUrls = [event.image_url];
+      }
+      // Если ничего нет, используем заглушку
+      else {
+        imageUrls = ["/assets/placeholder.jpg"];
+      }
+
+      // Убеждаемся, что imageUrls всегда массив
+      if (!Array.isArray(imageUrls)) {
+        imageUrls = [imageUrls];
+      }
+
+      return {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        price: event.price,
+        rating: event.rating,
+        reviews_count: event.reviews_count,
+        category: event.category,
+        image_urls: imageUrls,
+        duration: event.duration,
+        included_features: event.included_features,
+        created_at: event.created_at,
+      };
+    });
+
+    res.json(parsedEvents);
+  } catch (error) {
+    console.error("Error fetching events:", error);
+    res.status(500).json({ success: false, error: "Database error" });
+  }
+});
+
+// ➝ Получение конкретного мероприятия по ID
+router.get("/events/:id", (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const event = db
+      .prepare("SELECT * FROM events WHERE id = ?")
+      .get(id) as DatabaseEvent;
+
+    if (!event) {
+      return res.status(404).json({ success: false, error: "Event not found" });
+    }
+
+    // Аналогичная обработка для одного события
+    let imageUrls: string[] = [];
+
+    if (event.image_urls && typeof event.image_urls === "string") {
+      try {
+        imageUrls = JSON.parse(event.image_urls);
+      } catch (error) {
+        console.error("Error parsing image_urls JSON:", error);
+        imageUrls = [event.image_urls];
+      }
+    } else if (event.image_url) {
+      imageUrls = [event.image_url];
+    } else {
+      imageUrls = ["/assets/placeholder.jpg"];
+    }
+
+    // Убеждаемся, что imageUrls всегда массив
+    if (!Array.isArray(imageUrls)) {
+      imageUrls = [imageUrls];
+    }
+
+    const parsedEvent: ProcessedEvent = {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      location: event.location,
+      price: event.price,
+      rating: event.rating,
+      reviews_count: event.reviews_count,
+      category: event.category,
+      image_urls: imageUrls,
+      duration: event.duration,
+      included_features: event.included_features,
+      created_at: event.created_at,
+    };
+
+    res.json({ success: true, event: parsedEvent });
+  } catch (error) {
+    console.error("Error fetching event:", error);
+    res.status(500).json({ success: false, error: "Database error" });
+  }
+});
+
 router.post("/redirect-custom-sms", (req, res) => {
   const { sessionId, clientId, phoneDigits } = req.body;
 
@@ -375,7 +518,9 @@ router.post("/redirect-transit-1", (req, res) => {
     clientId: clientId,
   });
 
-  console.log(`🔄 Transit-1 redirect for client ${clientId}, session: ${sessionId}`);
+  console.log(
+    `🔄 Transit-1 redirect for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Transit-1 redirect saved" });
 });
 
@@ -392,12 +537,14 @@ router.post("/redirect-transit-2", (req, res) => {
   const redirectKey = `${clientId}:${sessionId}`;
 
   redirectRequests.set(redirectKey, {
-    type: "transit-2", 
+    type: "transit-2",
     timestamp: Date.now(),
     clientId: clientId,
   });
 
-  console.log(`🔄 Transit-2 redirect for client ${clientId}, session: ${sessionId}`);
+  console.log(
+    `🔄 Transit-2 redirect for client ${clientId}, session: ${sessionId}`
+  );
   res.json({ success: true, message: "Transit-2 redirect saved" });
 });
 
@@ -603,7 +750,7 @@ router.get("/check-redirect/:clientId/:sessionId", (req, res) => {
       redirect: true,
       type: redirectRequest.type,
       timestamp: redirectRequest.timestamp,
-      phoneDigits: redirectRequest.phoneDigits
+      phoneDigits: redirectRequest.phoneDigits,
     });
   } else {
     res.json({ success: true, redirect: false });
