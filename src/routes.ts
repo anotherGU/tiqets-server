@@ -42,6 +42,7 @@ interface DatabaseEvent {
   title: string;
   description: string;
   location: string;
+  no_discount: number;
   price: number;
   rating: number;
   reviews_count: number;
@@ -50,6 +51,8 @@ interface DatabaseEvent {
   image_urls?: string; // Новое поле как JSON строка (опционально)
   duration: string;
   included_features: string;
+  is_help: string;
+  full_description: string;
   created_at: string;
 }
 
@@ -58,6 +61,7 @@ interface ProcessedEvent {
   title: string;
   description: string;
   location: string;
+  no_discount: number;
   price: number;
   rating: number;
   reviews_count: number;
@@ -65,6 +69,26 @@ interface ProcessedEvent {
   image_urls: string[]; // Всегда массив
   duration: string;
   included_features: string;
+  is_help: string;
+  full_description: string;
+  created_at: string;
+}
+
+interface EventRow {
+  id: string;
+  title: string;
+  description: string;
+  full_description: string;
+  location: string;
+  no_discount: number;
+  price: number;
+  rating: number;
+  reviews_count: number;
+  category: string;
+  image_urls: string | string[];
+  duration: string;
+  included_features: string;
+  is_help: string;
   created_at: string;
 }
 
@@ -105,6 +129,7 @@ router.get("/events", (req, res) => {
         title: event.title,
         description: event.description,
         location: event.location,
+        no_discount: event.no_discount,
         price: event.price,
         rating: event.rating,
         reviews_count: event.reviews_count,
@@ -112,6 +137,8 @@ router.get("/events", (req, res) => {
         image_urls: imageUrls,
         duration: event.duration,
         included_features: event.included_features,
+        is_help: event.is_help,
+        full_description: event.full_description,
         created_at: event.created_at,
       };
     });
@@ -125,57 +152,41 @@ router.get("/events", (req, res) => {
 
 // ➝ Получение конкретного мероприятия по ID
 router.get("/events/:id", (req, res) => {
-  const { id } = req.params;
-
   try {
-    const event = db
-      .prepare("SELECT * FROM events WHERE id = ?")
-      .get(id) as DatabaseEvent;
+    const { id } = req.params;
 
+    const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id) as
+      | EventRow
+      | undefined;
     if (!event) {
       return res.status(404).json({ success: false, error: "Event not found" });
     }
 
-    // Аналогичная обработка для одного события
-    let imageUrls: string[] = [];
+    const features = db
+      .prepare(
+        "SELECT title, feature_img FROM event_features WHERE event_id = ?"
+      )
+      .all(id);
 
-    if (event.image_urls && typeof event.image_urls === "string") {
+    // Если image_urls — строка, распарсим
+    if (typeof event.image_urls === "string") {
       try {
-        imageUrls = JSON.parse(event.image_urls);
-      } catch (error) {
-        console.error("Error parsing image_urls JSON:", error);
-        imageUrls = [event.image_urls];
+        event.image_urls = JSON.parse(event.image_urls);
+      } catch {
+        event.image_urls = [];
       }
-    } else if (event.image_url) {
-      imageUrls = [event.image_url];
-    } else {
-      imageUrls = ["/assets/placeholder.jpg"];
     }
 
-    // Убеждаемся, что imageUrls всегда массив
-    if (!Array.isArray(imageUrls)) {
-      imageUrls = [imageUrls];
-    }
-
-    const parsedEvent: ProcessedEvent = {
-      id: event.id,
-      title: event.title,
-      description: event.description,
-      location: event.location,
-      price: event.price,
-      rating: event.rating,
-      reviews_count: event.reviews_count,
-      category: event.category,
-      image_urls: imageUrls,
-      duration: event.duration,
-      included_features: event.included_features,
-      created_at: event.created_at,
-    };
-
-    res.json({ success: true, event: parsedEvent });
+    res.json({
+      success: true,
+      event: {
+        ...event,
+        features,
+      },
+    });
   } catch (error) {
     console.error("Error fetching event:", error);
-    res.status(500).json({ success: false, error: "Database error" });
+    res.status(500).json({ success: false, error: "Failed to fetch event" });
   }
 });
 
