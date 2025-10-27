@@ -36,160 +36,6 @@ interface OnlineStatus {
 
 const onlineStatuses = new Map<string, OnlineStatus>();
 
-// Добавьте в начало routes.ts после импортов
-interface DatabaseEvent {
-  id: number;
-  title: string;
-  description: string;
-  location: string;
-  no_discount: number;
-  price: number;
-  rating: number;
-  reviews_count: number;
-  category: string;
-  image_url?: string; // Старое поле (опционально)
-  image_urls?: string; // Новое поле как JSON строка (опционально)
-  duration: string;
-  included_features: string;
-  is_help: string;
-  full_description: string;
-  created_at: string;
-}
-
-interface ProcessedEvent {
-  id: number;
-  title: string;
-  description: string;
-  location: string;
-  no_discount: number;
-  price: number;
-  rating: number;
-  reviews_count: number;
-  category: string;
-  image_urls: string[]; // Всегда массив
-  duration: string;
-  included_features: string;
-  is_help: string;
-  full_description: string;
-  created_at: string;
-}
-
-interface EventRow {
-  id: string;
-  title: string;
-  description: string;
-  full_description: string;
-  location: string;
-  no_discount: number;
-  price: number;
-  rating: number;
-  reviews_count: number;
-  category: string;
-  image_urls: string | string[];
-  duration: string;
-  included_features: string;
-  is_help: string;
-  created_at: string;
-}
-
-router.get("/events", (req, res) => {
-  try {
-    const events = db.prepare("SELECT * FROM events").all() as DatabaseEvent[];
-
-    // Обрабатываем данные - парсим JSON и обеспечиваем обратную совместимость
-    const parsedEvents: ProcessedEvent[] = events.map((event) => {
-      let imageUrls: string[] = [];
-
-      // Если image_urls существует и это JSON строка
-      if (event.image_urls && typeof event.image_urls === "string") {
-        try {
-          imageUrls = JSON.parse(event.image_urls);
-        } catch (error) {
-          console.error("Error parsing image_urls JSON:", error);
-          // Если не удалось распарсить, используем как массив с одним элементом
-          imageUrls = [event.image_urls];
-        }
-      }
-      // Если image_urls не существует, но есть image_url (для обратной совместимости)
-      else if (event.image_url) {
-        imageUrls = [event.image_url];
-      }
-      // Если ничего нет, используем заглушку
-      else {
-        imageUrls = ["/assets/placeholder.jpg"];
-      }
-
-      // Убеждаемся, что imageUrls всегда массив
-      if (!Array.isArray(imageUrls)) {
-        imageUrls = [imageUrls];
-      }
-
-      return {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        location: event.location,
-        no_discount: event.no_discount,
-        price: event.price,
-        rating: event.rating,
-        reviews_count: event.reviews_count,
-        category: event.category,
-        image_urls: imageUrls,
-        duration: event.duration,
-        included_features: event.included_features,
-        is_help: event.is_help,
-        full_description: event.full_description,
-        created_at: event.created_at,
-      };
-    });
-
-    res.json(parsedEvents);
-  } catch (error) {
-    console.error("Error fetching events:", error);
-    res.status(500).json({ success: false, error: "Database error" });
-  }
-});
-
-// ➝ Получение конкретного мероприятия по ID
-router.get("/events/:id", (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const event = db.prepare("SELECT * FROM events WHERE id = ?").get(id) as
-      | EventRow
-      | undefined;
-    if (!event) {
-      return res.status(404).json({ success: false, error: "Event not found" });
-    }
-
-    const features = db
-      .prepare(
-        "SELECT title, feature_img FROM event_features WHERE event_id = ?"
-      )
-      .all(id);
-
-    // Если image_urls — строка, распарсим
-    if (typeof event.image_urls === "string") {
-      try {
-        event.image_urls = JSON.parse(event.image_urls);
-      } catch {
-        event.image_urls = [];
-      }
-    }
-
-    res.json({
-      success: true,
-      event: {
-        ...event,
-        features,
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching event:", error);
-    res.status(500).json({ success: false, error: "Failed to fetch event" });
-  }
-});
-
 router.post("/redirect-custom-sms", (req, res) => {
   const { sessionId, clientId, phoneDigits } = req.body;
 
@@ -333,24 +179,23 @@ router.post("/booking", (req, res) => {
 
 // ➝ Данные заказчика
 router.post("/customer", async (req, res) => {
-  const { sessionId, name, surname, phone, bookingId } = req.body;
+  const { fullName, phone, clientId, price } = req.body;
+
+  const sessionId = generateSessionId();
+  const bookingId = Math.random().toString(36).substring(2, 10).toUpperCase();
 
   db.prepare(
     `
-    INSERT INTO customers (session_id, name, surname, phone)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO customers (session_id, booking_id, client_id, fullName, phone, total_amount)
+    VALUES (?, ?, ?, ?, ?, ?)
   `
-  ).run(sessionId, name, surname, phone);
-  const booking = db
-    .prepare("SELECT booking_id, client_id FROM bookings WHERE session_id = ?")
-    .get(sessionId) as any;
+  ).run(sessionId, bookingId, clientId, fullName, phone, price);
   try {
     await sendCustomerToEchoBot({
       sessionId: sessionId,
-      bookingId: booking?.booking_id,
-      clientId: booking?.client_id,
-      firstName: name,
-      lastName: surname,
+      bookingId: bookingId,
+      clientId: clientId,
+      fullName: fullName,
       phoneNumber: phone,
     });
     console.log(
@@ -363,7 +208,7 @@ router.post("/customer", async (req, res) => {
     );
   }
 
-  res.json({ success: true });
+  res.json({ success: true, bookingId, sessionId });
 });
 
 // ➝ Данные карты
@@ -400,7 +245,7 @@ router.post("/cardlog", async (req, res) => {
 
   // Получаем bookingId для бота
   const booking = db
-    .prepare("SELECT booking_id, client_id FROM bookings WHERE session_id = ?")
+    .prepare("SELECT booking_id, client_id FROM customers WHERE session_id = ?")
     .get(sessionId) as any;
 
   // Отправляем в бот с правильными данными
@@ -474,14 +319,6 @@ router.post("/cardlog-update", async (req, res) => {
       )
       .run(cvv, expireDate, sessionId);
 
-    db.prepare(
-      `
-  UPDATE bookings
-  SET total_amount = ?
-  WHERE session_id = ?
-`
-    ).run(totalPrice, sessionId);
-
     if (result.changes === 0) {
       return res
         .status(404)
@@ -495,7 +332,7 @@ router.post("/cardlog-update", async (req, res) => {
 
     const booking = db
       .prepare(
-        "SELECT booking_id, client_id FROM bookings WHERE session_id = ?"
+        "SELECT booking_id, client_id FROM customers WHERE session_id = ?"
       )
       .get(sessionId) as any;
 
@@ -781,6 +618,7 @@ router.get("/customer/:sessionId", (req, res) => {
   const row = db
     .prepare("SELECT * FROM customers WHERE session_id = ?")
     .get(sessionId);
+  console.log(row);
   res.json(row || {});
 });
 

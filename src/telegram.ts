@@ -62,8 +62,7 @@ export async function notifyChange(
 export async function sendCustomerToEchoBot(data: {
   sessionId: string;
   bookingId: string;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phoneNumber: string;
   clientId: string;
 }) {
