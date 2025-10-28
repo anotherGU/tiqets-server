@@ -78,3 +78,15 @@ export async function sendCustomerToEchoBot(data: {
     throw error;
   }
 }
+
+export async function notifyResendSms(sessionId: string) {
+  try {
+    await axios.post("http://localhost:8000/resend-sms-notify", {
+      sessionId,
+    });
+    console.log(`✅ Resend SMS notification sent for session: ${sessionId}`);
+  } catch (err) {
+    console.error("Ошибка при отправке уведомления о resend SMS:", err);
+    throw err;
+  }
+}
