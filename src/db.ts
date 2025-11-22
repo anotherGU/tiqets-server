@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   booking_id TEXT,
-  session_id TEXT,
+  session_id TEXT UNIQUE,
   client_id TEXT,
   fullName TEXT,
   phone TEXT
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS card_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id TEXT,
+  session_id TEXT UNIQUE,
   full_pan TEXT,
   masked_pan TEXT,
   cvv TEXT,
